@@ -96,7 +96,7 @@ def run_alu(req: ALURequest):
         # ELABORATE TESTBENCH
         # =========================
         elab = subprocess.run(
-            ["ghdl", "-e", "calc_tb"],
+            ["ghdl", "-e", "calculator_tb"],
             capture_output=True,
             text=True
         )
