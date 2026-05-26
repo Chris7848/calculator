@@ -3,24 +3,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import subprocess
 import os
-import re
 
 app = FastAPI()
 
-# =========================
-# ENABLE CORS
-# =========================
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# =========================
-# REQUEST MODEL
-# =========================
 class ALURequest(BaseModel):
     A: int
     B: int
@@ -28,145 +20,77 @@ class ALURequest(BaseModel):
     Display: int = 0
 
 
-# =========================
-# ROOT ROUTE
-# =========================
+INPUT_FILE = "input.txt"
+OUTPUT_FILE = "output.txt"
+
+
 @app.get("/")
 def home():
-    return {
-        "status": "online",
-        "message": "VHDL ALU Backend Running"
-    }
+    return {"status": "ok"}
 
 
-# =========================
-# RUN ALU
-# =========================
 @app.post("/run")
 def run_alu(req: ALURequest):
 
-    try:
+    # =========================
+    # 1. WRITE INPUT FILE
+    # =========================
+    with open(INPUT_FILE, "w") as f:
+        f.write(f"{req.A}\n{req.B}\n{req.Op}\n{req.Display}\n")
 
-        # =========================
-        # DEBUG FILES
-        # =========================
-        files = os.listdir(".")
+    # =========================
+    # 2. CLEAN
+    # =========================
+    subprocess.run(["ghdl", "--clean"], capture_output=True)
 
-        # =========================
-        # CLEAN PREVIOUS BUILD
-        # =========================
-        subprocess.run(
-            ["ghdl", "--clean"],
-            capture_output=True
-        )
+    # =========================
+    # 3. COMPILE
+    # =========================
+    files = [
+        "alu.vhdl",
+        "register.vhdl",
+        "calc_top.vhdl",
+        "calc_tb.vhdl"
+    ]
 
-        # =========================
-        # COMPILE FILES
-        # =========================
-        compile_files = [
-            "alu.vhdl",
-            "register.vhdl",
-            "calc_top.vhdl",
-            "calc_tb.vhdl"
-        ]
+    for f in files:
+        if not os.path.exists(f):
+            return {"status": "missing_file", "file": f}
 
-        for file in compile_files:
+        res = subprocess.run(["ghdl", "-a", f], capture_output=True, text=True)
+        if res.returncode != 0:
+            return {"status": "compile_error", "file": f, "error": res.stderr}
 
-            if not os.path.exists(file):
-                return {
-                    "status": "missing_file",
-                    "missing": file,
-                    "available_files": files
-                }
+    # =========================
+    # 4. ELABORATE
+    # =========================
+    elab = subprocess.run(["ghdl", "-e", "calculator_tb"], capture_output=True, text=True)
 
-            result = subprocess.run(
-                ["ghdl", "-a", file],
-                capture_output=True,
-                text=True
-            )
+    if elab.returncode != 0:
+        return {"status": "elaboration_error", "error": elab.stderr}
 
-            if result.returncode != 0:
-                return {
-                    "status": "compile_error",
-                    "file": file,
-                    "error": result.stderr
-                }
+    # =========================
+    # 5. RUN SIM
+    # =========================
+    run = subprocess.run(
+        ["ghdl", "-r", "calculator_tb"],
+        capture_output=True,
+        text=True,
+        timeout=5
+    )
 
-        # =========================
-        # ELABORATE TESTBENCH
-        # =========================
-        elab = subprocess.run(
-            ["ghdl", "-e", "calculator_tb"],
-            capture_output=True,
-            text=True
-        )
+    # =========================
+    # 6. READ OUTPUT FILE
+    # =========================
+    if os.path.exists(OUTPUT_FILE):
+        with open(OUTPUT_FILE, "r") as f:
+            result = f.read().strip()
+    else:
+        result = "no_output_file"
 
-        if elab.returncode != 0:
-            return {
-                "status": "elaboration_error",
-                "error": elab.stderr
-            }
-
-        # =========================
-        # PASS INPUTS TO TESTBENCH
-        # =========================
-        env = os.environ.copy()
-
-        env["A_VAL"] = str(req.A)
-        env["B_VAL"] = str(req.B)
-        env["OP_VAL"] = str(req.Op)
-        env["DISP_VAL"] = str(req.Display)
-
-        # =========================
-        # RUN SIMULATION
-        # =========================
-        run = subprocess.run(
-            ["ghdl", "-r", "calculator_tb"],
-            capture_output=True,
-            text=True,
-            env=env,
-            timeout=5
-        )
-
-        # =========================
-        # CHECK RUNTIME ERROR
-        # =========================
-        if run.returncode != 0:
-            return {
-                "status": "runtime_error",
-                "stderr": run.stderr,
-                "stdout": run.stdout
-            }
-
-        # =========================
-        # EXTRACT RESULT
-        # =========================
-        output = run.stdout.strip()
-
-        # Try extracting integer result
-        numbers = re.findall(r'\d+', output)
-
-        result_value = numbers[-1] if numbers else "0"
-
-        # =========================
-        # SUCCESS RESPONSE
-        # =========================
-        return {
-            "status": "success",
-            "result": result_value,
-            "raw_output": output
-        }
-
-    except subprocess.TimeoutExpired:
-
-        return {
-            "status": "timeout",
-            "error": "Simulation took too long"
-        }
-
-    except Exception as e:
-
-        return {
-            "status": "server_error",
-            "error": str(e)
-        }
+    return {
+        "status": "success",
+        "result": result,
+        "stdout": run.stdout,
+        "stderr": run.stderr
+    }
