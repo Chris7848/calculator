@@ -1,29 +1,26 @@
 library IEEE;
 use IEEE.STD_LOGIC_1164.ALL;
 use IEEE.NUMERIC_STD.ALL;
+use std.textio.all;
 
 entity calculator_tb is
 end calculator_tb;
 
 architecture Behavioral of calculator_tb is
 
-    -- =========================
-    -- INPUTS (FROM BACKEND)
-    -- =========================
-    signal A_sig        : std_logic_vector(7 downto 0);
-    signal B_sig        : std_logic_vector(7 downto 0);
-    signal Op_sig       : std_logic_vector(1 downto 0);
-    signal Display_sig  : std_logic := '0';
+    signal A_sig       : std_logic_vector(7 downto 0);
+    signal B_sig       : std_logic_vector(7 downto 0);
+    signal Op_sig      : std_logic_vector(1 downto 0);
+    signal Display_sig : std_logic := '0';
 
-    -- OUTPUTS
     signal Main_Out_sig : std_logic_vector(7 downto 0);
     signal Err_sig      : std_logic;
 
+    file input_file  : text open read_mode is "input.txt";
+    file output_file : text open write_mode is "output.txt";
+
 begin
 
-    -- =========================
-    -- DEVICE UNDER TEST
-    -- =========================
     DUT: entity work.calculator_top
         port map (
             A_top           => A_sig,
@@ -34,27 +31,38 @@ begin
             Err_out         => Err_sig
         );
 
-    -- =========================
-    -- MAIN TEST PROCESS
-    -- =========================
     process
+        variable line_in  : line;
+        variable line_out : line;
+        variable vA, vB, vOp, vDisp : integer;
     begin
 
-        -- =====================================
-        -- WAIT FOR BACKEND INPUT ASSIGNMENT
-        -- =====================================
+        -- wait for backend to write file
+        wait for 100 ns;
 
-        wait for 1 ns;  -- allow backend to assign values
+        -- read inputs
+        readline(input_file, line_in); read(line_in, vA);
+        readline(input_file, line_in); read(line_in, vB);
+        readline(input_file, line_in); read(line_in, vOp);
+        readline(input_file, line_in); read(line_in, vDisp);
 
-        -- apply inputs already set by backend
-        -- (no file, no loop, no clock)
+        -- assign signals
+        A_sig  <= std_logic_vector(to_unsigned(vA, 8));
+        B_sig  <= std_logic_vector(to_unsigned(vB, 8));
+        Op_sig <= std_logic_vector(to_unsigned(vOp, 2));
 
-        -- simple stabilization delay
-        wait for 5 ns;
+        if vDisp = 1 then
+            Display_sig <= '1';
+        else
+            Display_sig <= '0';
+        end if;
 
-        -- =========================
-        -- END SIMULATION CLEANLY
-        -- =========================
+        wait for 20 ns;
+
+        -- write output
+        write(line_out, to_integer(unsigned(Main_Out_sig)));
+        writeline(output_file, line_out);
+
         wait;
     end process;
 
