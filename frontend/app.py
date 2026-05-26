@@ -5,7 +5,7 @@ import time
 # =========================
 # BACKEND URL
 # =========================
-API_URL = "https://calculator-1-8alq.onrender.com"
+API_URL = "https://calculator-1-8alq.onrender.com/run"
 
 st.set_page_config(page_title="VHDL ALU Simulator", layout="centered")
 
