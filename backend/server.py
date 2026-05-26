@@ -66,8 +66,8 @@ def run_alu(req: ALURequest):
         compile_files = [
             "alu.vhdl",
             "register.vhdl",
-            "calculator_top.vhdl",
-            "calculator_tb.vhdl"
+            "calc_top.vhdl",
+            "calc_tb.vhdl"
         ]
 
         for file in compile_files:
@@ -96,7 +96,7 @@ def run_alu(req: ALURequest):
         # ELABORATE TESTBENCH
         # =========================
         elab = subprocess.run(
-            ["ghdl", "-e", "calculator_tb"],
+            ["ghdl", "-e", "calc_tb"],
             capture_output=True,
             text=True
         )
